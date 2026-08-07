@@ -26,5 +26,10 @@ class Booking(db.Model):
         default="Booked"
     )
 
+    booking_date = db.Column(
+        db.DateTime,
+        server_default=db.func.now()
+    )
+
     def __repr__(self):
         return f"<Booking {self.id}>"

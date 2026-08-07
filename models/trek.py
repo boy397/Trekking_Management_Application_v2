@@ -40,6 +40,16 @@ class Trek(db.Model):
         default=1
     )
 
+    start_date = db.Column(
+        db.Date,
+        nullable=True
+    )
+
+    end_date = db.Column(
+        db.Date,
+        nullable=True
+    )
+
     staff_id = db.Column(
         db.Integer,
         db.ForeignKey("users.id"),
