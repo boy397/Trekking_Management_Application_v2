@@ -4,7 +4,7 @@ import json
 import csv
 import threading
 from datetime import datetime, date
-from flask import Flask, render_template
+from flask import Flask, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
 
@@ -262,7 +262,11 @@ app.register_blueprint(user_bp)
 # Page Routing (Entry Point for Vue)
 @app.route('/')
 def index():
-    return app.send_static_file('index.html')
+    return send_from_directory('templates', 'index.html')
+
+@app.route('/templates/<path:filename>')
+def serve_template(filename):
+    return send_from_directory('templates', filename)
 
 # Startup hook to prepare database and initialize threads
 if __name__ == '__main__':
