@@ -1,0 +1,73 @@
+<div v-if="currentUser && currentUser.role === 'User'">
+    <ul class="nav nav-tabs mb-4">
+        <li class="nav-item"><a class="nav-link" href="#" :class="{active: currentView === 'user_dashboard'}" @click.prevent="loadUserTreks">Find Treks</a></li>
+        <li class="nav-item"><a class="nav-link" href="#" :class="{active: currentView === 'user_history'}" @click.prevent="loadUserBookings">My Bookings & Export</a></li>
+        <li class="nav-item"><a class="nav-link" href="#" :class="{active: currentView === 'user_profile'}" @click.prevent="loadUserProfile">Profile Settings</a></li>
+    </ul>
+
+    <!-- TAB: USER DISCOVERY -->
+    <div v-if="currentView === 'user_dashboard'">
+        <div class="row g-2 mb-4">
+            <div class="col-md-3"><input type="text" class="form-control form-control-sm" placeholder="Search route..." v-model="filterSearch" @input="loadUserTreks"></div>
+            <div class="col-md-3">
+                <select class="form-select form-select-sm" v-model="filterDifficulty" @change="loadUserTreks">
+                    <option value="">All Difficulties</option><option value="Easy">Easy</option><option value="Moderate">Moderate</option><option value="Hard">Hard</option>
+                </select>
+            </div>
+            <div class="col-md-3"><input type="text" class="form-control form-control-sm" placeholder="Filter Location..." v-model="filterLocation" @input="loadUserTreks"></div>
+            <div class="col-md-3"><input type="number" class="form-control form-control-sm" placeholder="Max Days..." v-model="filterDuration" @input="loadUserTreks"></div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-4 mb-3" v-for="t in userTreks">
+                <div class="card p-3 border-0 shadow-sm h-100">
+                    <h5>{{ t.trek_name }} <span class="badge bg-info text-dark float-end small">{{ t.difficulty }}</span></h5>
+                    <p class="text-muted small"><i class="fa-solid fa-location-dot"></i> {{ t.location }}</p>
+                    <p class="small mb-1">{{ t.description }}</p>
+                    <p class="small mb-3 text-muted">Guide: {{ t.staff_name }} | Days: {{ t.duration_days }} | Slots left: {{ t.slots }}</p>
+                    <button class="btn btn-primary btn-sm w-100" @click="bookTrek(t.id)" :disabled="t.slots <= 0">Book Now</button>
+                </div>
+            </div>
+            <div v-if="userTreks.length === 0" class="col-12 text-center text-muted">No open treks match.</div>
+        </div>
+    </div>
+
+    <!-- TAB: USER BOOKING HISTORY & CSV EXPORTS -->
+    <div v-else-if="currentView === 'user_history'">
+        <div class="d-flex justify-content-between mb-3 align-items-center">
+            <h5>Booking History</h5>
+            <button class="btn btn-secondary btn-sm" @click="exportHistory" :disabled="exportInfo.status === 'Pending'">
+                {{ exportInfo.status === 'Pending' ? 'Processing CSV...' : 'Export History (CSV)' }}
+            </button>
+        </div>
+
+        <div v-if="exportInfo.status === 'Ready'" class="alert alert-success d-flex justify-content-between align-items-center border-0 p-2 shadow-sm mb-3 small">
+            <span>CSV Export finished!</span>
+            <a :href="'/api/users/download-export/' + exportInfo.filename" class="btn btn-success btn-sm py-0">Download CSV</a>
+        </div>
+
+        <table class="table bg-white rounded shadow-sm table-striped small">
+            <thead><tr><th>Booking #</th><th>Trek Name</th><th>Location</th><th>Start Date</th><th>Date Reserved</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+                <tr v-for="b in userBookings">
+                    <td>#{{ b.booking_id }}</td><td>{{ b.trek_name }}</td><td>{{ b.location }}</td><td>{{ b.start_date }}</td><td>{{ b.booking_date }}</td><td>{{ b.status }}</td>
+                    <td>
+                        <button class="btn btn-sm btn-link text-danger p-0" v-if="b.status === 'Booked'" @click="cancelBooking(b.booking_id)">Cancel</button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- TAB: USER PROFILE EDIT -->
+    <div v-else-if="currentView === 'user_profile'">
+        <div class="card p-4 border-0 shadow-sm col-md-6">
+            <h5>Modify Profile Settings</h5>
+            <form @submit.prevent="updateUserProfile">
+                <div class="mb-3"><label class="form-label small text-muted">Full Name</label><input type="text" class="form-control" v-model="profileName" required></div>
+                <div class="mb-3"><label class="form-label small text-muted">Phone Number</label><input type="text" class="form-control" v-model="profilePhone" required></div>
+                <button type="submit" class="btn btn-primary btn-sm">Save Profile Details</button>
+            </form>
+        </div>
+    </div>
+</div>

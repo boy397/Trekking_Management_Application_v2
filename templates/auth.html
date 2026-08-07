@@ -1,0 +1,41 @@
+<!-- LOGIN VIEW -->
+<div v-if="currentView === 'login'" class="row justify-content-center mt-5">
+    <div class="col-md-4">
+        <div class="card p-4 shadow-sm border-0">
+            <h3 class="fw-bold text-center mb-3">Sign In</h3>
+            <form @submit.prevent="handleLogin">
+                <div class="mb-3">
+                    <label class="form-label small text-muted">Email</label>
+                    <input type="email" class="form-control" v-model="authEmail" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small text-muted">Password</label>
+                    <input type="password" class="form-control" v-model="authPassword" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Log In</button>
+            </form>
+            <div class="text-center mt-3 small text-muted">
+                Are you a Trekker? <a href="#" @click.prevent="currentView = 'register'">Register here</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- REGISTER VIEW -->
+<div v-else-if="currentView === 'register'" class="row justify-content-center mt-5">
+    <div class="col-md-5">
+        <div class="card p-4 shadow-sm border-0">
+            <h3 class="fw-bold text-center mb-3">Trekker Signup</h3>
+            <form @submit.prevent="handleRegister">
+                <div class="mb-3"><label class="form-label small text-muted">Name</label><input type="text" class="form-control" v-model="authName" required></div>
+                <div class="mb-3"><label class="form-label small text-muted">Email</label><input type="email" class="form-control" v-model="authEmail" required></div>
+                <div class="mb-3"><label class="form-label small text-muted">Phone</label><input type="text" class="form-control" v-model="authPhone" required></div>
+                <div class="mb-3"><label class="form-label small text-muted">Password</label><input type="password" class="form-control" v-model="authPassword" required></div>
+                <button type="submit" class="btn btn-primary w-100">Register</button>
+            </form>
+            <div class="text-center mt-3 small text-muted">
+                Already registered? <a href="#" @click.prevent="currentView = 'login'">Login here</a>
+            </div>
+        </div>
+    </div>
+</div>

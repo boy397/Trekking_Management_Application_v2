@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trekking Management Application (TMA)</title>
+    <!-- Bootstrap 5 CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        [v-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="bg-light">
+    <div id="app" class="container-fluid p-0" v-cloak>
+        <!-- NAVIGATION NAVBAR -->
+        <nav class="navbar navbar-expand-lg navbar-dark bg-dark px-3 shadow-sm">
+            <a class="navbar-brand fw-bold" href="#" @click.prevent="goHome">
+                <i class="fa-solid fa-mountain-sun text-primary me-2"></i>TrekSync
+            </a>
+            <div class="collapse navbar-collapse justify-content-end">
+                <ul class="navbar-nav align-items-center" v-if="currentUser">
+                    <li class="nav-item me-3">
+                        <span class="navbar-text text-light">Welcome, <strong>{{ currentUser.name }}</strong> ({{ currentUser.role }})</span>
+                    </li>
+                    <li class="nav-item">
+                        <button class="btn btn-outline-danger btn-sm" @click="handleLogout">Logout</button>
+                    </li>
+                </ul>
+                <ul class="navbar-nav" v-else>
+                    <li class="nav-item"><a class="nav-link" href="#" @click.prevent="currentView = 'login'">Login</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#" @click.prevent="currentView = 'register'">Register</a></li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- ALERTS AND NOTIFICATIONS -->
+        <div class="container mt-3" v-if="alertMsg">
+            <div class="alert alert-dismissible fade show" :class="'alert-' + alertType" role="alert">
+                {{ alertMsg }}
+                <button type="button" class="btn-close" @click="alertMsg = ''"></button>
+            </div>
+        </div>
+
+        <!-- MAIN LAYOUT -->
+        <div class="container py-4">
+            <!-- 1. AUTH SUB-VIEW (NOT LOGGED IN) -->
+            <div v-if="!currentUser">
+                <auth-view></auth-view>
+            </div>
+
+            <!-- 2. ROLE WORKSPACES (LOGGED IN) -->
+            <div v-else>
+                <!-- Admin Sub-View -->
+                <admin-view></admin-view>
+
+                <!-- Staff Sub-View -->
+                <staff-view></staff-view>
+
+                <!-- User Sub-View -->
+                <user-view></user-view>
+            </div>
+        </div>
+    </div>
+
+    <!-- Axios CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <!-- Vue 3 and Modular Templates via Browser Native ES Module Fetching -->
+    <script type="module">
+        import { createApp } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js';
+        
+        // Dynamically fetch templates from templates directory on the fly
+        const AuthView = {
+            template: await (await fetch('/templates/auth.html')).text()
+        };
+        const AdminView = {
+            template: await (await fetch('/templates/admin.html')).text()
+        };
+        const StaffView = {
+            template: await (await fetch('/templates/staff.html')).text()
+        };
+        const UserView = {
+            template: await (await fetch('/templates/user.html')).text()
+        };
+
+        createApp({
+            components: {
+                AuthView,
+                AdminView,
+                StaffView,
+                UserView
+            },
+            data() {
+                return {
+                    currentView: 'login',
+                    currentUser: null,
+                    alertMsg: '',
+                    alertType: 'success',
+
+                    // Auth Forms
+                    authEmail: '',
+                    authPassword: '',
+                    authName: '',
+                    authPhone: '',
+
+                    // Admin Dashboard State
+                    adminStats: { total_treks: 0, total_users: 0, total_staff: 0, total_bookings: 0 },
+                    treks: [],
+                    users: [],
+                    logs: [],
+                    reportData: { total_treks: 0, completed_treks: 0, open_treks: 0, total_bookings: 0, booked_bookings: 0, cancelled_bookings: 0, popular_treks: [] },
+                    userSearchQuery: '',
+                    staffOptions: [],
+
+                    // Trek Inline Forms
+                    showTrekForm: false,
+                    trekEditingId: null,
+                    trekForm: { trek_name: '', location: '', difficulty: 'Moderate', slots: 10, status: 'Open', duration_days: 1, staff_id: null, description: '', start_date: '', end_date: '' },
+
+                    // Staff Inline Forms
+                    showStaffForm: false,
+                    staffForm: { name: '', email: '', password: '', phone: '' },
+
+                    // Staff Dashboard State
+                    staffTreks: [],
+                    participantList: [],
+
+                    // Trekker User State
+                    userTreks: [],
+                    userBookings: [],
+                    profileName: '',
+                    profilePhone: '',
+                    filterSearch: '',
+                    filterDifficulty: '',
+                    filterLocation: '',
+                    filterDuration: '',
+                    exportInfo: { status: 'None', filename: '' },
+                    pollInterval: null
+                }
+            },
+            mounted() {
+                this.checkSession();
+            },
+            beforeUnmount() {
+                if (this.pollInterval) clearInterval(this.pollInterval);
+            },
+            methods: {
+                showAlert(msg, type = 'success') {
+                    this.alertMsg = msg;
+                    this.alertType = type;
+                    setTimeout(() => { this.alertMsg = ''; }, 5000);
+                },
+                goHome() {
+                    if (!this.currentUser) {
+                        this.currentView = 'login';
+                    } else if (this.currentUser.role === 'Admin') {
+                        this.currentView = 'admin_dashboard';
+                        this.loadAdminDashboard();
+                    } else if (this.currentUser.role === 'Staff') {
+                        this.loadStaffTreks();
+                    } else if (this.currentUser.role === 'User') {
+                        this.loadUserTreks();
+                    }
+                },
+                async checkSession() {
+                    try {
+                        const res = await axios.get('/api/auth/me');
+                        if (res.data.logged_in) {
+                            this.currentUser = res.data.user;
+                            this.goHome();
+                        } else {
+                            this.currentView = 'login';
+                        }
+                    } catch (e) {
+                        this.currentView = 'login';
+                    }
+                },
+                async handleLogin() {
+                    try {
+                        const res = await axios.post('/api/auth/login', { email: this.authEmail, password: this.authPassword });
+                        this.currentUser = res.data.user;
+                        this.authEmail = '';
+                        this.authPassword = '';
+                        this.showAlert('Logged in successfully!');
+                        this.goHome();
+                    } catch (e) {
+                        this.showAlert(e.response?.data?.error || 'Invalid credentials.', 'danger');
+                    }
+                },
+                async handleRegister() {
+                    try {
+                        const res = await axios.post('/api/auth/register', { name: this.authName, email: this.authEmail, phone: this.authPhone, password: this.authPassword });
+                        this.showAlert(res.data.message);
+                        this.currentView = 'login';
+                        this.authName = ''; this.authEmail = ''; this.authPhone = ''; this.authPassword = '';
+                    } catch (e) {
+                        this.showAlert(e.response?.data?.error || 'Registration failed.', 'danger');
+                    }
+                },
+                async handleLogout() {
+                    try {
+                        await axios.post('/api/auth/logout');
+                        this.currentUser = null;
+                        this.currentView = 'login';
+                        this.showAlert('Logged out.');
+                    } catch (e) {
+                        this.showAlert('Logout failed.', 'danger');
+                    }
+                },
+
+                // ADMIN METHODS
+                async loadAdminDashboard() {
+                    try {
+                        const res = await axios.get('/api/admin/dashboard');
+                        this.adminStats = res.data;
+                    } catch (e) { console.error(e); }
+                },
+                async loadAdminTreks() {
+                    this.currentView = 'admin_treks';
+                    this.showTrekForm = false;
+                    try {
+                        const res = await axios.get('/api/admin/treks');
+                        this.treks = res.data;
+                        const usersRes = await axios.get('/api/admin/users-staff');
+                        this.staffOptions = usersRes.data.filter(u => u.role === 'Staff');
+                    } catch (e) { this.showAlert('Error fetching treks.', 'danger'); }
+                },
+                async loadAdminUsers() {
+                    this.currentView = 'admin_users';
+                    this.showStaffForm = false;
+                    try {
+                        const res = await axios.get('/api/admin/users-staff', { params: { search: this.userSearchQuery } });
+                        this.users = res.data;
+                    } catch (e) { this.showAlert('Error fetching directory.', 'danger'); }
+                },
+                async updateUserStatus(userId, action) {
+                    try {
+                        const res = await axios.post('/api/admin/deactivate-blacklist', { user_id: userId, action: action });
+                        this.showAlert(res.data.message);
+                        this.loadAdminUsers();
+                    } catch (e) { this.showAlert(e.response?.data?.error || 'Action failed.', 'danger'); }
+                },
+                async createStaff() {
+                    try {
+                        const res = await axios.post('/api/admin/staff', this.staffForm);
+                        this.showAlert(res.data.message);
+                        this.showStaffForm = false;
+                        this.loadAdminUsers();
+                        this.staffForm = { name: '', email: '', password: '', phone: '' };
+                    } catch (e) { this.showAlert(e.response?.data?.error || 'Failed to create guide.', 'danger'); }
+                },
+                resetTrekForm() {
+                    this.trekForm = { trek_name: '', location: '', difficulty: 'Moderate', slots: 10, status: 'Open', duration_days: 1, staff_id: null, description: '', start_date: '', end_date: '' };
+                },
+                editTrekInline(t) {
+                    this.trekEditingId = t.id;
+                    this.trekForm = { ...t };
+                    this.showTrekForm = true;
+                },
+                async saveTrek() {
+                    try {
+                        if (this.trekEditingId) {
+                            await axios.put(`/api/admin/treks/${this.trekEditingId}`, this.trekForm);
+                            this.showAlert('Trek successfully updated.');
+                        } else {
+                            await axios.post('/api/admin/treks', this.trekForm);
+                            this.showAlert('Trek successfully created.');
+                        }
+                        this.showTrekForm = false;
+                        this.loadAdminTreks();
+                    } catch (e) { this.showAlert(e.response?.data?.error || 'Save failed.', 'danger'); }
+                },
+                async deleteTrek(trekId) {
+                    if (confirm('Delete this trek?')) {
+                        try {
+                            const res = await axios.delete(`/api/admin/treks/${trekId}`);
+                            this.showAlert(res.data.message);
+                            this.loadAdminTreks();
+                        } catch (e) { this.showAlert('Deletion failed.', 'danger'); }
+                    }
+                },
+                async loadAdminReports() {
+                    this.currentView = 'admin_reports';
+                    try {
+                        const res = await axios.get('/api/admin/reports');
+                        this.reportData = res.data;
+                        const logsRes = await axios.get('/api/logs');
+                        this.logs = logsRes.data;
+                    } catch (e) { this.showAlert('Error loading reports.', 'danger'); }
+                },
+                async triggerManualJob(jobType) {
+                    try {
+                        const res = await axios.post('/api/admin/trigger-job', { job_type: jobType });
+                        this.showAlert(res.data.message);
+                        this.loadAdminReports();
+                    } catch (e) { this.showAlert('Job execution failed.', 'danger'); }
+                },
+
+                // STAFF METHODS
+                async loadStaffTreks() {
+                    this.currentView = 'staff_dashboard';
+                    try {
+                        const res = await axios.get('/api/staff/treks');
+                        this.staffTreks = res.data;
+                    } catch (e) { this.showAlert('Error loading assigned treks.', 'danger'); }
+                },
+                async loadTrekParticipants(trekId) {
+                    try {
+                        const res = await axios.get(`/api/staff/treks/${trekId}/users`);
+                        this.participantList = res.data;
+                        this.currentView = 'staff_participants';
+                    } catch (e) { this.showAlert('Error fetching participants list.', 'danger'); }
+                },
+                async saveStaffTrekUpdates(t) {
+                    try {
+                        await axios.put(`/api/staff/treks/${t.id}`, { slots: t.slots, status: t.status });
+                        this.showAlert('Trek details updated!');
+                        this.loadStaffTreks();
+                    } catch (e) { this.showAlert(e.response?.data?.error || 'Failed to update details.', 'danger'); }
+                },
+
+                // USER METHODS
+                async loadUserTreks() {
+                    this.currentView = 'user_dashboard';
+                    try {
+                        const res = await axios.get('/api/users/treks', {
+                            params: { search: this.filterSearch, difficulty: this.filterDifficulty, location: this.filterLocation, duration: this.filterDuration }
+                        });
+                        this.userTreks = res.data;
+                    } catch (e) { this.showAlert('Error loading treks.', 'danger'); }
+                },
+                async bookTrek(trekId) {
+                    try {
+                        const res = await axios.post('/api/users/bookings', { trek_id: trekId });
+                        this.showAlert(res.data.message);
+                        this.loadUserTreks();
+                    } catch (e) { this.showAlert(e.response?.data?.error || 'Failed to book slot.', 'danger'); }
+                },
+                async loadUserBookings() {
+                    this.currentView = 'user_history';
+                    try {
+                        const res = await axios.get('/api/users/bookings');
+                        this.userBookings = res.data;
+                        this.checkExportStatus();
+                    } catch (e) { this.showAlert('Error loading booking list.', 'danger'); }
+                },
+                async cancelBooking(bookingId) {
+                    if (confirm('Cancel reservation?')) {
+                        try {
+                            const res = await axios.post(`/api/users/bookings/${bookingId}/cancel`);
+                            this.showAlert(res.data.message);
+                            this.loadUserBookings();
+                        } catch (e) { this.showAlert('Cancellation failed.', 'danger'); }
+                    }
+                },
+                loadUserProfile() {
+                    this.currentView = 'user_profile';
+                    this.profileName = this.currentUser.name;
+                    this.profilePhone = this.currentUser.phone;
+                },
+                async updateUserProfile() {
+                    try {
+                        const res = await axios.put('/api/users/profile', { name: this.profileName, phone: this.profilePhone });
+                        this.currentUser = res.data.user;
+                        this.showAlert('Profile settings saved.');
+                    } catch (e) { this.showAlert('Update failed.', 'danger'); }
+                },
+                async exportHistory() {
+                    try {
+                        const res = await axios.post('/api/users/export-history');
+                        this.showAlert(res.data.message, 'info');
+                        this.exportInfo.status = 'Pending';
+                        this.pollInterval = setInterval(this.checkExportStatus, 1000);
+                    } catch (e) { this.showAlert('Export failed.', 'danger'); }
+                },
+                async checkExportStatus() {
+                    try {
+                        const res = await axios.get('/api/users/export-status');
+                        this.exportInfo = res.data;
+                        if (this.exportInfo.status === 'Ready') {
+                            clearInterval(this.pollInterval);
+                        }
+                    } catch (e) { clearInterval(this.pollInterval); }
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
