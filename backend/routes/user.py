@@ -201,24 +201,14 @@ def user_export_history():
         return err_resp, err_code
 
     user_id = session['user_id']
+    import time
+    from tasks import export_user_bookings_csv_task
     
-    current_app.export_status[user_id] = {'status': 'Pending'}
-    
-    # Trigger log_job using inline logic
-    log_entry = {
-        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'job': "CSV History Export",
-        'message': f"Triggered export booking history for User ID: {user_id}"
-    }
-    current_app.job_logs.insert(0, log_entry)
-    
-    # Spawn background thread utilizing the app object
-    app_obj = current_app._get_current_object()
-    export_thread = threading.Thread(target=app_obj.async_csv_export, args=(app_obj, user_id))
-    export_thread.start()
+    filename = f"bookings_user_{user_id}_{int(time.time())}.csv"
+    export_user_bookings_csv_task.delay(user_id, filename)
     
     return jsonify({
-        'message': 'Export process triggered. You will be alerted when the download file is ready.',
+        'message': 'Export process triggered via Celery. You will be alerted when the download file is ready.',
         'status': 'Pending'
     })
 
@@ -229,8 +219,14 @@ def user_export_status():
         return err_resp, err_code
 
     user_id = session['user_id']
-    status_info = current_app.export_status.get(user_id, {'status': 'None'})
-    return jsonify(status_info)
+    status_file = f'static/exports/status_{user_id}.json'
+    if os.path.exists(status_file):
+        try:
+            with open(status_file, 'r') as f:
+                return jsonify(json.load(f))
+        except Exception:
+            return jsonify({'status': 'None'})
+    return jsonify({'status': 'None'})
 
 @user_bp.route('/api/users/download-export/<filename>', methods=['GET'])
 def download_export(filename):

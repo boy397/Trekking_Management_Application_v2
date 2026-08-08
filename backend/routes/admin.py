@@ -1,6 +1,7 @@
 from datetime import datetime
 from flask import Blueprint, request, jsonify, session, current_app
 from models import db, User, Trek, Booking
+from tasks import send_staff_credentials_email
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -212,6 +213,10 @@ def admin_add_staff():
     )
     db.session.add(new_staff)
     db.session.commit()
+
+    # Dispatch email task using celery
+    send_staff_credentials_email.delay(email, password, name)
+
     return jsonify({'message': 'Trek Staff created successfully!'}), 201
 
 @admin_bp.route('/api/admin/deactivate-blacklist', methods=['POST'])
@@ -278,7 +283,14 @@ def get_job_logs():
     user, err_resp, err_code = check_admin()
     if err_resp:
         return err_resp, err_code
-    return jsonify(current_app.job_logs)
+    import os, json
+    if os.path.exists('job_logs.json'):
+        try:
+            with open('job_logs.json', 'r') as f:
+                return jsonify(json.load(f))
+        except Exception:
+            return jsonify([])
+    return jsonify([])
 
 @admin_bp.route('/api/admin/trigger-job', methods=['POST'])
 def trigger_manual_job():
@@ -289,11 +301,13 @@ def trigger_manual_job():
     data = request.get_json() or {}
     job_type = data.get('job_type')
     
+    from tasks import send_daily_reminders_task, generate_monthly_report_task
+    
     if job_type == 'reminders':
-        current_app.run_daily_reminders(current_app)
-        return jsonify({'message': 'Daily reminders job triggered successfully.'})
+        send_daily_reminders_task.delay()
+        return jsonify({'message': 'Daily reminders job triggered successfully via Celery.'})
     elif job_type == 'report':
-        current_app.run_monthly_report(current_app)
-        return jsonify({'message': 'Monthly activity report job triggered successfully.'})
+        generate_monthly_report_task.delay()
+        return jsonify({'message': 'Monthly activity report job triggered successfully via Celery.'})
     else:
         return jsonify({'error': 'Invalid job type.'}), 400
