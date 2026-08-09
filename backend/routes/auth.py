@@ -1,5 +1,6 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify
 from models import db, User
+from utils import generate_token, decode_token
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -20,7 +21,7 @@ def register():
     new_user = User(
         name=name,
         email=email,
-        password=password, # plain string password for 1/10 complexity
+        password=password,
         phone=phone,
         role='User',
         status='Approved'
@@ -45,9 +46,14 @@ def login():
     if user.status != 'Approved':
         return jsonify({'error': f'Your account is {user.status.lower()}. Access denied.'}), 403
 
-    session['user_id'] = user.id
+    token = generate_token(user.id)
+    if isinstance(token, str) and not token.startswith('ey'):
+        # Just a sanity check if an exception string was returned
+        pass
+
     return jsonify({
         'message': 'Login successful!',
+        'token': token,
         'user': {
             'id': user.id,
             'name': user.name,
@@ -60,17 +66,22 @@ def login():
 
 @auth_bp.route('/api/auth/logout', methods=['POST'])
 def logout():
-    session.pop('user_id', None)
     return jsonify({'message': 'Logged out successfully.'})
 
 @auth_bp.route('/api/auth/me', methods=['GET'])
 def get_me():
-    if 'user_id' not in session:
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
         return jsonify({'logged_in': False}), 200
+
+    token = auth_header.split(' ')[1]
+    user_id, error_msg = decode_token(token)
     
-    user = User.query.get(session['user_id'])
+    if error_msg:
+        return jsonify({'logged_in': False, 'message': error_msg}), 200
+        
+    user = User.query.get(user_id)
     if not user or user.status != 'Approved':
-        session.pop('user_id', None)
         return jsonify({'logged_in': False}), 200
 
     return jsonify({

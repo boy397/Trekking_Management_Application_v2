@@ -3,7 +3,7 @@
     <!-- NAVIGATION NAVBAR -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark px-3 shadow-sm">
       <a class="navbar-brand fw-bold" href="#" @click.prevent="goHome">
-        <i class="fa-solid fa-mountain-sun text-primary me-2"></i>TrekSync
+        TrekSync
       </a>
       <div class="collapse navbar-collapse justify-content-end">
         <ul class="navbar-nav align-items-center" v-if="currentUser">
@@ -44,6 +44,16 @@ import axios from 'axios'
 axios.defaults.baseURL = 'http://localhost:8085'
 axios.defaults.withCredentials = true
 
+axios.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
+
 const router = useRouter()
 const currentUser = ref(null)
 const alertMsg = ref('')
@@ -80,6 +90,7 @@ async function handleLogout() {
   try {
     await axios.post('/api/auth/logout')
     currentUser.value = null
+    localStorage.removeItem('token')
     showAlert('Logged out successfully.')
     router.push('/login')
   } catch (e) {

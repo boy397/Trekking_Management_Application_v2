@@ -1,14 +1,28 @@
 import os
+import json
 import threading
-from flask import Blueprint, request, jsonify, session, send_from_directory, current_app
+from flask import Blueprint, request, jsonify, send_from_directory, current_app
 from models import db, User, Trek, Booking
+from utils import decode_token
 
 user_bp = Blueprint('user', __name__)
 
 def check_user():
-    user_id = session.get('user_id')
-    if not user_id:
+    auth_header = request.headers.get('Authorization')
+    token = None
+    
+    if auth_header and auth_header.startswith('Bearer '):
+        token = auth_header.split(' ')[1]
+    elif request.args.get('token'):
+        token = request.args.get('token')
+        
+    if not token:
         return None, jsonify({'error': 'Unauthorized. Please login.'}), 401
+        
+    user_id, error_msg = decode_token(token)
+    if error_msg:
+        return None, jsonify({'error': error_msg}), 401
+    
     user = User.query.get(user_id)
     if not user or user.status != 'Approved':
         return None, jsonify({'error': 'Unauthorized or account inactive.'}), 403
@@ -74,7 +88,7 @@ def user_book_trek():
     if err_resp:
         return err_resp, err_code
 
-    user_id = session['user_id']
+    user_id = user.id
     data = request.get_json() or {}
     trek_id = data.get('trek_id')
 
@@ -113,7 +127,7 @@ def user_get_bookings():
     if err_resp:
         return err_resp, err_code
 
-    user_id = session['user_id']
+    user_id = user.id
     bookings = Booking.query.filter_by(user_id=user_id).all()
     
     results = []
@@ -139,7 +153,7 @@ def user_cancel_booking(booking_id):
     if err_resp:
         return err_resp, err_code
 
-    user_id = session['user_id']
+    user_id = user.id
     booking = Booking.query.get_or_404(booking_id)
 
     if booking.user_id != user_id:
@@ -169,7 +183,7 @@ def user_update_profile():
     if err_resp:
         return err_resp, err_code
 
-    user_id = session['user_id']
+    user_id = user.id
     user_obj = User.query.get(user_id)
     data = request.get_json() or {}
 
@@ -200,7 +214,7 @@ def user_export_history():
     if err_resp:
         return err_resp, err_code
 
-    user_id = session['user_id']
+    user_id = user.id
     import time
     from tasks import export_user_bookings_csv_task
     
@@ -218,7 +232,7 @@ def user_export_status():
     if err_resp:
         return err_resp, err_code
 
-    user_id = session['user_id']
+    user_id = user.id
     status_file = f'static/exports/status_{user_id}.json'
     if os.path.exists(status_file):
         try:
@@ -234,7 +248,7 @@ def download_export(filename):
     if err_resp:
         return err_resp, err_code
 
-    user_id = session['user_id']
+    user_id = user.id
     if f"user_{user_id}" not in filename:
         return jsonify({'error': 'Unauthorized file access.'}), 403
         

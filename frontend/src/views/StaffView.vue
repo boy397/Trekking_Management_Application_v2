@@ -23,7 +23,7 @@
       <div class="col-md-6 mb-3" v-for="t in staffTreks" :key="t.id">
         <div class="card p-3 border-0 shadow-sm">
           <h5>{{ t.trek_name }} <span class="badge bg-secondary float-end">{{ t.difficulty }}</span></h5>
-          <p class="text-muted small mb-2"><i class="fa-solid fa-location-dot"></i> {{ t.location }}</p>
+          <p class="text-muted small mb-2">📍 {{ t.location }}</p>
           <p class="small mb-1">Status: <strong>{{ t.status }}</strong> | Slots left: <strong>{{ t.slots }}</strong></p>
           <p class="small mb-2">Registered Attendees: <strong>{{ t.registered_users_count }}</strong></p>
           

@@ -1,12 +1,19 @@
-from flask import Blueprint, request, jsonify, session, current_app
+from flask import Blueprint, request, jsonify, current_app
 from models import db, User, Trek, Booking
+from utils import decode_token
 
 staff_bp = Blueprint('staff', __name__)
 
 def check_staff():
-    user_id = session.get('user_id')
-    if not user_id:
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
         return None, jsonify({'error': 'Unauthorized. Please login.'}), 401
+        
+    token = auth_header.split(' ')[1]
+    user_id, error_msg = decode_token(token)
+    if error_msg:
+        return None, jsonify({'error': error_msg}), 401
+    
     user = User.query.get(user_id)
     if not user or user.status != 'Approved':
         return None, jsonify({'error': 'Unauthorized or account inactive.'}), 403
@@ -20,7 +27,7 @@ def staff_get_treks():
     if err_resp:
         return err_resp, err_code
 
-    staff_id = session['user_id']
+    staff_id = user.id
     treks = Trek.query.filter_by(staff_id=staff_id).all()
     
     results = []
@@ -45,7 +52,7 @@ def staff_update_trek(trek_id):
     if err_resp:
         return err_resp, err_code
 
-    staff_id = session['user_id']
+    staff_id = user.id
     trek = Trek.query.get_or_404(trek_id)
     
     if trek.staff_id != staff_id:
@@ -77,7 +84,7 @@ def staff_get_trek_participants(trek_id):
     if err_resp:
         return err_resp, err_code
 
-    staff_id = session['user_id']
+    staff_id = user.id
     trek = Trek.query.get_or_404(trek_id)
     
     if trek.staff_id != staff_id:

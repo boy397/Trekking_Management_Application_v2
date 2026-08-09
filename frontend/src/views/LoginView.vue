@@ -38,6 +38,7 @@ const showAlert = inject('showAlert')
 async function handleLogin() {
   try {
     const res = await axios.post('/api/auth/login', { email: email.value, password: password.value })
+    localStorage.setItem('token', res.data.token)
     currentUser.value = res.data.user
     showAlert('Login successful!')
     

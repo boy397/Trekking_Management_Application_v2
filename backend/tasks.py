@@ -46,8 +46,31 @@ def send_daily_reminders_task():
             if trek and user and trek.start_date:
                 days_until = (trek.start_date - today).days
                 if 0 <= days_until <= 3:
-                    # Simulate sending email/SMS notification
-                    print(f"[REMINDER] Sent notification to {user.name} ({user.email}) for trek '{trek.trek_name}' starting in {days_until} days.")
+                    sender_email = os.environ.get('MAIL_DEFAULT_SENDER', 'admin@trek.com')
+                    smtp_server = os.environ.get('MAIL_SERVER', 'localhost')
+                    smtp_port = int(os.environ.get('MAIL_PORT', 1025))
+                    smtp_user = os.environ.get('MAIL_USERNAME', '')
+                    smtp_password = os.environ.get('MAIL_PASSWORD', '')
+
+                    msg = MIMEMultipart()
+                    msg['From'] = sender_email
+                    msg['To'] = user.email
+                    msg['Subject'] = f"Reminder: Upcoming Trek '{trek.trek_name}'"
+                    
+                    body = f"Hello {user.name},\n\nThis is a friendly reminder that your trek '{trek.trek_name}' is starting in {days_until} days on {trek.start_date.strftime('%Y-%m-%d')}.\n\nPlease make sure you are prepared.\n\nBest Regards,\nTrekking Management System"
+                    msg.attach(MIMEText(body, 'plain'))
+                    
+                    try:
+                        server = smtplib.SMTP(smtp_server, smtp_port)
+                        server.starttls()
+                        if smtp_user and smtp_password:
+                            server.login(smtp_user, smtp_password)
+                        server.sendmail(sender_email, user.email, msg.as_string())
+                        server.quit()
+                        print(f"[REMINDER SENT] Sent notification to {user.name} ({user.email}) for trek '{trek.trek_name}'")
+                    except Exception as smtp_e:
+                        print(f"[REMINDER ERROR] Could not send to {user.email}: {smtp_e}")
+
                     reminded_count += 1
                     
         log_job("Daily Reminders Task", f"Scan complete. Sent notifications to {reminded_count} users for upcoming treks.")
@@ -86,6 +109,32 @@ def generate_monthly_report_task():
         with open(report_path, 'w') as f:
             f.write(report_html)
             
+        admin = User.query.filter_by(role='Admin').first()
+        if admin:
+            sender_email = os.environ.get('MAIL_DEFAULT_SENDER', 'admin@trek.com')
+            smtp_server = os.environ.get('MAIL_SERVER', 'localhost')
+            smtp_port = int(os.environ.get('MAIL_PORT', 1025))
+            smtp_user = os.environ.get('MAIL_USERNAME', '')
+            smtp_password = os.environ.get('MAIL_PASSWORD', '')
+
+            msg = MIMEMultipart()
+            msg['From'] = sender_email
+            msg['To'] = admin.email
+            msg['Subject'] = 'Monthly Trekking Management Report'
+            
+            msg.attach(MIMEText(report_html, 'html'))
+            
+            try:
+                server = smtplib.SMTP(smtp_server, smtp_port)
+                server.starttls()
+                if smtp_user and smtp_password:
+                    server.login(smtp_user, smtp_password)
+                server.sendmail(sender_email, admin.email, msg.as_string())
+                server.quit()
+                log_job("Monthly Activity Report Task", f"Email sent successfully to admin {admin.email}.")
+            except Exception as smtp_e:
+                log_job("Monthly Report Email Error", f"Could not send email to admin: {smtp_e}")
+
         log_job("Monthly Activity Report Task", f"Report generated successfully. Total bookings tracked: {total_bookings}")
         return "Report generated successfully"
     except Exception as e:
@@ -168,6 +217,7 @@ def send_staff_credentials_email(email, password, name):
         try:
             # We will try to connect to SMTP
             server = smtplib.SMTP(smtp_server, smtp_port)
+            server.starttls()
             if smtp_user and smtp_password:
                 server.login(smtp_user, smtp_password)
             text = msg.as_string()

@@ -62,5 +62,23 @@ with app.app_context():
         db.session.commit()
         print("Successfully seeded database with Admin user (admin@trek.com / admin123)")
 
+# Initialize Celery in the Flask app process
+from celery import Celery, Task
+
+def make_celery(app):
+    class FlaskTask(Task):
+        def __call__(self, *args, **kwargs):
+            with app.app_context():
+                return self.run(*args, **kwargs)
+
+    celery_app = Celery(app.import_name)
+    celery_app.config_from_object(app.config["CELERY"])
+    celery_app.Task = FlaskTask
+    celery_app.set_default()
+    app.extensions["celery"] = celery_app
+    return celery_app
+
+celery = make_celery(app)
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8085, debug=True)

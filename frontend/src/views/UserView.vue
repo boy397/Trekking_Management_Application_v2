@@ -23,7 +23,7 @@
         <div class="col-md-4 mb-3" v-for="t in userTreks" :key="t.id">
           <div class="card p-3 border-0 shadow-sm h-100">
             <h5>{{ t.trek_name }} <span class="badge bg-info text-dark float-end small">{{ t.difficulty }}</span></h5>
-            <p class="text-muted small"><i class="fa-solid fa-location-dot"></i> {{ t.location }}</p>
+            <p class="text-muted small">📍 {{ t.location }}</p>
             <p class="small mb-1">{{ t.description }}</p>
             <p class="small mb-3 text-muted">Guide: {{ t.staff_name }} | Days: {{ t.duration_days }} | Slots left: {{ t.slots }}</p>
             <button class="btn btn-primary btn-sm w-100" @click="bookTrek(t.id)" :disabled="t.slots <= 0">Book Now</button>
@@ -44,7 +44,7 @@
 
       <div v-if="exportInfo.status === 'Ready'" class="alert alert-success d-flex justify-content-between align-items-center border-0 p-2 shadow-sm mb-3 small">
         <span>CSV Export finished!</span>
-        <a :href="'http://localhost:8085/api/users/download-export/' + exportInfo.filename" class="btn btn-success btn-sm py-0">Download CSV</a>
+        <a :href="'http://localhost:8085/api/users/download-export/' + exportInfo.filename + '?token=' + getToken()" class="btn btn-success btn-sm py-0">Download CSV</a>
       </div>
 
       <table class="table bg-white rounded shadow-sm table-striped small">
@@ -95,6 +95,8 @@ const profilePhone = ref('')
 
 const exportInfo = ref({ status: 'None', filename: '' })
 let pollInterval = null
+
+const getToken = () => localStorage.getItem('token')
 
 onMounted(() => {
   if (currentUser.value?.role === 'User') {

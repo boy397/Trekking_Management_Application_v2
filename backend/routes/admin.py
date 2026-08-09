@@ -1,14 +1,21 @@
 from datetime import datetime
-from flask import Blueprint, request, jsonify, session, current_app
+from flask import Blueprint, request, jsonify, current_app
 from models import db, User, Trek, Booking
 from tasks import send_staff_credentials_email
+from utils import decode_token
 
 admin_bp = Blueprint('admin', __name__)
 
 def check_admin():
-    user_id = session.get('user_id')
-    if not user_id:
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
         return None, jsonify({'error': 'Unauthorized. Please login.'}), 401
+        
+    token = auth_header.split(' ')[1]
+    user_id, error_msg = decode_token(token)
+    if error_msg:
+        return None, jsonify({'error': error_msg}), 401
+    
     user = User.query.get(user_id)
     if not user or user.status != 'Approved':
         return None, jsonify({'error': 'Unauthorized or account inactive.'}), 403
